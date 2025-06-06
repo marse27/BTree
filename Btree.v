@@ -43,7 +43,15 @@ Definition bad_btree_example : Tree nat :=
       Leaf nat 60 [190; 240; 260]
     ]
   ].
-
+  
+Definition bad_btree_example_most_m_children : Tree nat :=
+  Node nat 100 [100] [
+    Leaf nat 10 [10];
+    Leaf nat 20 [20];
+    Leaf nat 30 [30];
+    Leaf nat 40 [40] (* This is the 4th child, which violates m=3 *)
+  ].
+ 
 (*-----------------------------------------------------------------------------------------*)
 
 Arguments Nil  {A} _.
@@ -65,6 +73,7 @@ Fixpoint check_max_children {A : Type} (m : nat) (t : Tree A) : bool :=
   end.
 
 Eval compute in check_max_children 3 btree_example.
+Eval compute in check_max_children 3 bad_btree_example_most_m_children.
 
 (*-----------------------------------------------------------------------------------------*)
 
@@ -278,8 +287,6 @@ Section BTreeSearch.
 
 End BTreeSearch.
 
-(*-----------------------------------------------------------------------------------------*)
-
 Definition cmp_nat := Nat.compare.
 Definition search_nat := @search nat cmp_nat.
 Compute (search_nat btree_example 10).    (* = true *)
@@ -390,7 +397,7 @@ Section BTreeInsert.
       match t with
 
       | Nil _ =>
-        (* inserting into an empty (nil) tree just yields a one‐key leaf *)
+        (* inserting into an empty tree just yields a one key leaf *)
         Leaf m [x]
 
       | Leaf _ ks =>
@@ -431,15 +438,11 @@ Section BTreeInsert.
   Definition insert_non_full (t : Tree A) (x : A) : Tree A :=
     insert_non_full_aux (tree_size t) t x.
 
-  (* Finally, the top‐level [insert] stays the same: if the root is full, split first. *)
+  (* Finally, the top level [insert] stays the same: if the root is full, split first. *)
   Definition insert (t : Tree A) (x : A) : Tree A :=
     if full t then insert_non_full (split t) x
               else insert_non_full t x.
-
 End BTreeInsert.
-
-
-(*-----------------------------------------------------------------------------------------*)
 
 
 Eval compute in (
@@ -456,3 +459,52 @@ Eval compute in (
 
 (*-----------------------------------------------------------------------------------------*)
 
+Section BTreeInsertFlattenVerify.
+  Context {A : Type}.
+  Context (cmp : A -> A -> comparison).
+
+  (* Insert into the tree, then flatten *)
+  Definition flatten_after_insert (t : Tree A) (x : A) (insert : Tree A -> A -> Tree A) : list A :=
+    flatten_btree (insert t x).
+
+  (* Comparison for lists *)
+  Context (eqb : A -> A -> bool).
+
+  Fixpoint list_eqb (l1 l2 : list A) : bool :=
+    match l1, l2 with
+    | [], [] => true
+    | x::xs, y::ys => eqb x y && list_eqb xs ys
+    | _, _ => false
+    end.
+
+  (*Verification function *)
+  Definition verify_insert_flatten (t : Tree A) (x : A) (insert : Tree A -> A -> Tree A) : bool :=
+  let flat_inserted := flatten_after_insert t x insert in
+  let inserted_flat := insert_sorted cmp (flatten_btree t) x in
+  list_eqb flat_inserted inserted_flat.
+
+
+End BTreeInsertFlattenVerify.
+
+
+Eval compute in (
+  @verify_insert_flatten
+    nat
+    Nat.compare
+    Nat.eqb
+    btree_example
+    25
+    (@insert nat Nat.compare 3)
+).
+(* = true : bool *)
+
+Eval compute in (
+  @verify_insert_flatten
+    nat
+    Nat.compare
+    Nat.eqb
+    btree_example
+    5
+    (@insert nat Nat.compare 3)
+).
+(* = true : bool *)
