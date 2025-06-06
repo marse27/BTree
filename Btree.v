@@ -232,8 +232,6 @@ Definition is_btree (m : nat) (t : Tree nat) : bool :=
   && (* 7. The tree is balanced (all root-to-leaf paths have equal length). *)
      is_btree_balanced t.
 
-(* Example evaluation on the given sample: *)
-
 Eval compute in (is_btree 3 btree_example).  (* true for btree_example *)
 Eval compute in (is_btree 3 bad_btree_example). (*false for bad_btree_example*)
 
