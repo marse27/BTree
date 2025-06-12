@@ -3,173 +3,173 @@ Import ListNotations.
 Require Import Nat.
 Require Import Bool.
 
+Inductive TreeNat : Type :=
+| NilNat  : TreeNat
+| LeafNat : list nat -> TreeNat
+| NodeNat : list nat -> list TreeNat -> TreeNat.
 
+Arguments NilNat.
+Arguments LeafNat _.
+Arguments NodeNat _ _.
 
-Inductive Tree (A : Type) : Type :=
-| Nil : nat -> Tree A
-| Leaf : nat -> list A -> Tree A
-| Node : nat -> list A -> list (Tree A) -> Tree A.
+Definition btree_example : TreeNat :=
+  NodeNat [100] [
 
-(*-----------------------------------------------------------------------------------------*)
-
-Definition btree_example : Tree nat :=
-  Node nat 100 [100] [
-
-    Node nat 65 [35; 65] [
-      Leaf nat 10 [10];
-      Leaf nat 20 [40; 50];
-      Leaf nat 30 [70; 80; 90]
+    NodeNat [35; 65] [
+      LeafNat [10];
+      LeafNat [40; 50];
+      LeafNat [70; 80; 90]
     ];
 
-    Node nat 180 [130; 180] [
-      Leaf nat 40 [110; 120];
-      Leaf nat 50 [140; 160];
-      Leaf nat 60 [190; 240; 260]
-    ]
-  ].
-
-Definition bad_btree_example : Tree nat :=
-  Node nat 100 [100] [
-
-    Node nat 65 [35; 65] [
-      Leaf nat 10 [10];
-      Leaf nat 20 [40; 50];
-      Leaf nat 30 [70; 20]   (* 20 < 70 *)
-    ];
-
-    Node nat 180 [130; 180] [
-      Leaf nat 40 [110; 120];
-      Leaf nat 50 [140; 160];
-      Leaf nat 60 [190; 240; 260]
+    NodeNat [130; 180] [
+      LeafNat [110; 120];
+      LeafNat [140; 160];
+      LeafNat [190; 240; 260]
     ]
   ].
   
-Definition bad_btree_example_most_m_children : Tree nat :=
-  Node nat 100 [100] [
-    Leaf nat 10 [10];
-    Leaf nat 20 [20];
-    Leaf nat 30 [30];
-    Leaf nat 40 [40] (* This is the 4th child, which violates m=3 *)
+
+
+
+(* 1. Every node has at most [m] children *)
+Fixpoint check_max_children_nat (m : nat) (t : TreeNat) : bool :=
+  match t with
+  | NilNat => true
+  | LeafNat _ => true
+  | NodeNat _ children =>
+      leb (length children) m
+      && forallb (check_max_children_nat m) children
+  end.
+
+  Definition bad_btree_example_most_m_children : TreeNat :=
+  NodeNat [100] [
+    LeafNat [10];
+    LeafNat [20];
+    LeafNat [30];
+    LeafNat [40]  (* This is the 4th child, which violates m=3 *)
   ].
- 
-(*-----------------------------------------------------------------------------------------*)
 
-Arguments Nil  {A} _.
-Arguments Leaf {A} _ _.
-Arguments Node {A} _ _ _.
+Eval compute in check_max_children_nat 3 btree_example. (*true*)
+Eval compute in check_max_children_nat 3 bad_btree_example_most_m_children. (*false*)
 
-(*-----------------------------------------------------------------------------------------*)
-
-(* Every node has at most m children. *)
-
-Fixpoint check_max_children {A : Type} (m : nat) (t : Tree A) : bool :=
+(* 2. Every non-root internal node has at least [m/2] children *)
+Fixpoint check_min_children'_nat (is_root : bool) (m : nat) (t : TreeNat) : bool :=
   match t with
-  | Nil _ => true
-  | Leaf _ _ => true
-  | Node _ _ children =>
-      let len := length children in
-      let check_children := forallb (check_max_children m) children in
-      leb len m && check_children
+  | NilNat => true
+  | LeafNat _ => true
+  | NodeNat _ children =>
+      let min_req := Nat.div2 m in
+      (if is_root then true else leb min_req (length children))
+      && forallb (fun c => check_min_children'_nat false m c) children
   end.
 
-Eval compute in check_max_children 3 btree_example.
-Eval compute in check_max_children 3 bad_btree_example_most_m_children.
+Definition check_min_children_nat (m : nat) (t : TreeNat) : bool :=
+  check_min_children'_nat true m t.
 
-(*-----------------------------------------------------------------------------------------*)
+Definition bad_min_children_example : TreeNat :=
+  NodeNat [100] [
 
-(* Every node, except for the root and the leaves, has at least [m/2] children. *)
+    NodeNat [50] [  (* non-root node - only 1 child < 2 *)
+      LeafNat [10]
+    ];
 
-Fixpoint check_min_children' {A : Type} (is_root : bool) (m : nat) (t : Tree A) : bool :=
+    NodeNat [150] [
+      LeafNat [110];
+      LeafNat [160]
+    ]
+  ].
+
+Eval compute in check_min_children_nat 4 btree_example. (* true *)
+
+Eval compute in check_min_children_nat 4 bad_min_children_example. (* false *)
+
+
+(* 3. The root has at least two children (unless it is a leaf). *)
+Definition check_root_children_nat (t : TreeNat) : bool :=
   match t with
-  | Nil _ => true
-  | Leaf _ _ => true
-  | Node _ _ children =>
-      let min_required := Nat.div2 m in
-      let len := length children in
-      let this_ok := if is_root then true else leb min_required len in
-      let check_children := forallb (check_min_children' false m) children in
-      this_ok && check_children
+  | NodeNat _ children => leb 2 (length children)
+  | _ => true
   end.
 
-Definition check_min_children {A : Type} (m : nat) (t : Tree A) : bool :=
-  check_min_children' true m t.
+  Definition bad_root_children_example : TreeNat :=
+  NodeNat [100] [  (* Root node with only 1 child *)
+    LeafNat [50]
+  ].
 
-Eval compute in check_min_children 3 btree_example.
+Eval compute in check_root_children_nat btree_example. (* true *)
 
-(*-----------------------------------------------------------------------------------------*)
+Eval compute in check_root_children_nat bad_root_children_example. (* false *)
 
-(* The root node has at least two children unless it is a leaf. *)
 
-Definition check_root_children {A : Type} (t : Tree A) : bool :=
+(* 4. All leaves are on the same level. *)
+Fixpoint collect_leaf_levels_nat (t : TreeNat) (d : nat) : list nat :=
   match t with
-  | Nil _ => true
-  | Leaf _ _ => true
-  | Node _ _ children =>
-      leb 2 (length children)
+  | NilNat => []
+  | LeafNat _ => [d]
+  | NodeNat _ children =>
+      flat_map (fun c => collect_leaf_levels_nat c (S d)) children
   end.
 
-Eval compute in check_root_children btree_example.
-
-(*-----------------------------------------------------------------------------------------*)
-
-(* All leaves appear on the same level. *)
-Fixpoint collect_leaf_levels {A : Type} (t : Tree A) (depth : nat) : list nat :=
-  match t with
-  | Nil _=> []
-  | Leaf _ _ => [depth]
-  | Node _ _ children =>
-      flat_map (fun c => collect_leaf_levels c (S depth)) children
-  end.
-
-Definition all_equal (l : list nat) : bool :=
+Definition all_equal_nat (l : list nat) : bool :=
   match l with
   | [] => true
-  | x :: xs => forallb (fun y => Nat.eqb y x) xs
+  | x :: xs => forallb (Nat.eqb x) xs
   end.
 
-Definition check_all_leaves_same_level {A : Type} (t : Tree A) : bool :=
-  all_equal (collect_leaf_levels t 0).
+Definition check_all_leaves_same_level_nat (t : TreeNat) : bool :=
+  all_equal_nat (collect_leaf_levels_nat t 0).
 
-Eval compute in check_all_leaves_same_level btree_example.
+Definition bad_leaf_levels_example : TreeNat :=
+  NodeNat [100] [
 
-(*-----------------------------------------------------------------------------------------*)
+    LeafNat [50];  (* depth 1 *)
 
-(* A non-leaf node with k children contains k-1 keys. *)
+    NodeNat [150] [  (* depth 1, child goes to depth 2 *)
+      LeafNat  [160]
+    ]
+  ].
 
-Fixpoint valid_btree_children_key_relation {A : Type} (t : Tree A) : bool :=
+Eval compute in check_all_leaves_same_level_nat btree_example. (* true *)
+
+Eval compute in check_all_leaves_same_level_nat bad_leaf_levels_example. (* false *)
+
+
+(* 5. A non-leaf node with [k] children contains [k−1] keys. *)
+Fixpoint valid_btree_children_key_relation_nat (t : TreeNat) : bool :=
   match t with
-  | Nil _=> true
-  | Leaf _ _ => true
-  | Node _ keys children =>
-      let key_count := length keys in
-      let child_count := length children in
-      Nat.eqb child_count (key_count + 1)
-      && forallb valid_btree_children_key_relation children
+  | NilNat => true
+  | LeafNat _ => true
+  | NodeNat keys children =>
+      Nat.eqb (length children) (length keys + 1)
+      && forallb valid_btree_children_key_relation_nat children
   end.
 
-Compute valid_btree_children_key_relation btree_example.
+Definition bad_key_child_relation_example : TreeNat :=
+  NodeNat [100; 150] [  (* 2 keys, but only 2 children instead of 3 *)
+    LeafNat [50];
+    LeafNat [160]
+  ].
 
-(*-----------------------------------------------------------------------------------------*)
+Eval compute in valid_btree_children_key_relation_nat btree_example. (* true *)
 
-(* The btree is sorted *)
+Eval compute in valid_btree_children_key_relation_nat bad_key_child_relation_example. (* false *)
 
 
-Fixpoint interleave {A : Type} (ll : list (list A)) (ks : list A) {struct ll} : list A :=
+(* 6. Ordered. *)
+Fixpoint interleave_nat (ll : list (list nat)) (ks : list nat) : list nat :=
   match ll, ks with
   | [],      []       => []
-  | l :: ls, k :: ks' => l ++ k :: interleave ls ks'
+  | l :: ls, k :: ks' => l ++ k :: interleave_nat ls ks'
   | [l],     []       => l
-  | _,       _        => []    (* lengths don’t match → default [] *)
+  | _,       _        => []
   end.
 
-
-Fixpoint flatten_btree {A : Type} (t : Tree A) : list A :=
+Fixpoint flatten_btree_nat (t : TreeNat) : list nat :=
   match t with
-  | Nil _        => []
-  | Leaf _ keys  => keys
-  | Node _ keys children =>
-      let child_lists := map flatten_btree children in
-      interleave child_lists keys
+  | NilNat => []
+  | LeafNat keys => keys
+  | NodeNat keys children =>
+      interleave_nat (map flatten_btree_nat children) keys
   end.
 
 Fixpoint sorted_nat (l : list nat) : bool :=
@@ -177,332 +177,448 @@ Fixpoint sorted_nat (l : list nat) : bool :=
   | [] => true
   | x :: xs =>
     match xs with
-    | []      => true
+    | [] => true
     | y :: ys => Nat.leb x y && sorted_nat xs
     end
   end.
 
+Definition check_btree_sorted_nat (t : TreeNat) : bool :=
+  sorted_nat (flatten_btree_nat t).
+  
+Definition bad_btree_example : TreeNat :=
+  NodeNat [100] [
 
-Definition check_btree_sorted (t : Tree nat) : bool :=
-  sorted_nat (flatten_btree t).
+    NodeNat [35; 65] [
+      LeafNat [10];
+      LeafNat [40; 50];
+      LeafNat [70; 20]   (* 20 < 70, violates sorted order *)
+    ];
+
+    NodeNat [130; 180] [
+      LeafNat [110; 120];
+      LeafNat [140; 160];
+      LeafNat [190; 240; 260]
+    ]
+  ].
+  
+Eval compute in check_btree_sorted_nat btree_example. (* true *)
+
+Eval compute in check_btree_sorted_nat bad_btree_example. (* false *)
 
 
-Eval compute in check_btree_sorted btree_example.
-(* = true : bool *)
-
-Eval compute in check_btree_sorted bad_btree_example.
-(* = false : bool *)
-
-
-
-
-(*----------------------------------------------------------------------------------------*)
-
-(* The btree is balanced *)
-Fixpoint collect_leaf_depths (t : Tree nat) (current_depth : nat) : list nat :=
+(* 7. The tree is balanced. *)
+Fixpoint collect_leaf_depths_nat (t : TreeNat) (d : nat) : list nat :=
   match t with
-  | Nil _=> [current_depth]
-  | Leaf _ _ => [current_depth]
-  | Node _ _ children =>
-      flat_map (fun child => collect_leaf_depths child (S current_depth)) children
+  | NilNat => [d]
+  | LeafNat _ => [d]
+  | NodeNat _ children =>
+      flat_map (fun c => collect_leaf_depths_nat c (S d)) children
   end.
 
-Definition is_btree_balanced (t : Tree nat) : bool :=
-  all_equal (collect_leaf_depths t 0).
+Definition is_btree_balanced_nat (t : TreeNat) : bool :=
+  all_equal_nat (collect_leaf_depths_nat t 0).
 
-Compute is_btree_balanced btree_example.
+Definition bad_balanced_example : TreeNat :=
+  NodeNat [100] [
+    LeafNat [50];  (* depth 1 *)
 
-(*-----------------------------------------------------------------------------------------*)
+    NodeNat [150] [  (* depth 1 -> leads to depth 2 *)
+      LeafNat [160]
+    ]
+  ].
 
-(* Combine all the checks into a single “is_btree” predicate. *)
+Eval compute in is_btree_balanced_nat btree_example. (* true *)
 
-Definition is_btree (m : nat) (t : Tree nat) : bool :=
-  (* 1. Every node has at most m children. *)
-  check_max_children m t
-  && (* 2. Every non-root internal node has at least [m/2] children. *)
-     check_min_children m t
-  && (* 3. The root has at least two children (unless it is a leaf). *)
-     check_root_children t
-  && (* 4. All leaves are on the same level. *)
-     check_all_leaves_same_level t
-  && (* 5. Every non-leaf node with k children contains k−1 keys. *)
-     valid_btree_children_key_relation t
-  && (* 6. The in-order traversal of keys is strictly increasing. *)
-     check_btree_sorted t
-  && (* 7. The tree is balanced (all root-to-leaf paths have equal length). *)
-     is_btree_balanced t.
-
-Eval compute in (is_btree 3 btree_example).  (* true for btree_example *)
-Eval compute in (is_btree 3 bad_btree_example). (*false for bad_btree_example*)
+Eval compute in is_btree_balanced_nat bad_balanced_example. (* false *)
 
 
-(*-----------------------------------------------------------------------------------------*)
+(* Combined bree *)
+Definition is_btree_nat (m : nat) (t : TreeNat) : bool :=
+  check_max_children_nat m t
+  && check_min_children_nat m t
+  && check_root_children_nat t
+  && check_all_leaves_same_level_nat t
+  && valid_btree_children_key_relation_nat t
+  && check_btree_sorted_nat t
+  && is_btree_balanced_nat t.
 
+(* Search *)
+(* search a sorted list of keys *)
+Fixpoint search_keys_nat (keys : list nat) (x : nat) : bool :=
+  match keys with
+  | [] => false
+  | k :: ks =>
+    match Nat.compare x k with
+    | Eq => true
+    | Lt => false
+    | Gt => search_keys_nat ks x
+    end
+  end.
 
-(* Search in a B-tree *)
-
-Section BTreeSearch.
-  Context {A : Type}.
-  Context (cmp : A -> A -> comparison).
-
-  (* search a sorted list of keys *)
-  Fixpoint search_keys (keys : list A) (x : A) : bool :=
-    match keys with
-    | [] => false
-    | k :: ks =>
-      match cmp x k with
-      | Eq => true (* hit the key *)
-      | Lt => false (* x is smaller than this key, and keys are sorted ⇒ not here *)
-      | Gt => search_keys ks x (* x is greater, keep scanning *)
-      end
-    end.
-
-  (* search the whole tree *)
-  Fixpoint search (t : Tree A) (x : A) : bool :=
-    match t with
-    | Nil _ =>
-      false
-    | Leaf _ keys =>
-      search_keys keys x
-    | Node _ keys children =>
-      let fix aux (ks : list A) (cs : list (Tree A)) {struct cs} : bool :=
-          match cs with
-          | [] => false
-          | c :: cs' =>
-            match ks with
-            | [] =>
-              search c x
-            | k :: ks' =>
-              match cmp x k with
-              | Eq => true
-              | Lt => search c x
-              | Gt => aux ks' cs'
-              end
+(* search the whole tree *)
+Fixpoint search_nat (t : TreeNat) (x : nat) : bool :=
+  match t with
+  | NilNat => false
+  | LeafNat keys => search_keys_nat keys x
+  | NodeNat keys children =>
+      let fix aux (cs : list TreeNat) (ks : list nat) {struct cs} : bool :=
+        match cs with
+        | [] => false
+        | c :: cs' =>
+          match ks with
+          | [] => search_nat c x
+          | k :: ks' =>
+            match Nat.compare x k with
+            | Eq => true
+            | Lt => search_nat c x
+            | Gt => aux cs' ks'
             end
           end
-      in aux keys children
-    end.
-
-End BTreeSearch.
-
-Definition cmp_nat := Nat.compare.
-Definition search_nat := @search nat cmp_nat.
-Compute (search_nat btree_example 10).    (* = true *)
-Compute (search_nat btree_example 50).    (* = true *)
-Compute (search_nat btree_example 65).    (* = true *)
-Compute (search_nat btree_example 100).   (* = true *)
-Compute (search_nat btree_example 240).   (* = true *)
-
-Compute (search_nat btree_example 7).     (* = false *)
-Compute (search_nat btree_example 37).    (* = false *)
-Compute (search_nat btree_example 175).   (* = false *)
-Compute (search_nat btree_example 500).   (* = false *)
-
-
-(*-----------------------------------------------------------------------------------------*)
-
-
-Section BTreeInsert.
-  Context {A : Type}.
-  Context (cmp : A -> A -> comparison).
-  Variable m : nat.
-  Hypothesis m_ge_2 : 2 <= m.
-
-  (* max number of keys allowed in one node *)
-  Definition max_keys := 2*m - 1.
-
-  Fixpoint tree_size {A} (t : Tree A) : nat :=
-  match t with
-  | Nil _       => 1
-  | Leaf _ ks   => 1 + length ks
-  | Node _ ks cs =>
-    1 + length ks + fold_left (fun acc c => acc + tree_size c) cs 0
+        end
+      in aux children keys
   end.
 
-  (* test if a node is full *)
-  Definition full (t : Tree A) : bool :=
-    match t with
-    | Nil _       => false
-    | Leaf _ ks   => length ks =? max_keys
-    | Node _ ks _ => length ks =? max_keys
-    end.
+Eval compute in search_nat btree_example 10.   (* = true  *)
+Eval compute in search_nat btree_example 50.   (* = true  *)
+Eval compute in search_nat btree_example 65.   (* = true  *)
+Eval compute in search_nat btree_example 7.    (* = false *)
+Eval compute in search_nat btree_example 175.  (* = false *)
 
-  (* insert into a sorted list of keys *)
-  Fixpoint insert_sorted (ks : list A) (x : A) : list A :=
-    match ks with
-    | []       => [x]
-    | y :: ys =>
-      match cmp x y with
-      | Lt | Eq => x :: ks
-      | Gt      => y :: insert_sorted ys x
-      end
-    end.
+(* Insertion *)
 
-  (* replace the n-th child in a list of children *)
-  Fixpoint replace_nth {B} (n : nat) (b : B) (ls : list B) : list B :=
-    match n, ls with
-    | _, []       => []
-    | 0, _ :: xs  => b :: xs
-    | S n', y::ys => y :: replace_nth n' b ys
-    end.
+(* maximum number of keys for order [m] *)
+Definition max_keys_nat (m : nat) : nat := 2*m - 1.
 
-  (* find the index of the first key satisfying predicate *)
-  Fixpoint find_index {A'} (p : A' -> bool) (l : list A') (n : nat) : option nat :=
-    match l with
-    | [] => None
-    | x :: xs => if p x then Some n else find_index p xs (S n)
-    end.
+Fixpoint tree_size_nat (t : TreeNat) : nat :=
+  match t with
+  | NilNat => 1
+  | LeafNat ks => 1 + length ks
+  | NodeNat ks cs =>
+      1 + length ks + fold_left (fun acc c => acc + tree_size_nat c) cs 0
+  end.
 
-  Definition find_index_start {A'} (p : A' -> bool) (l : list A') : option nat :=
-    find_index p l 0.
+(* test if a node is full *)
+Definition full_nat (m : nat) (t : TreeNat) : bool :=
+  match t with
+  | NilNat => false
+  | LeafNat ks => length ks =? max_keys_nat m
+  | NodeNat ks _ => length ks =? max_keys_nat m
+  end.
 
-  (* split a full leaf or node into a two-child node *)
-  Definition split (t : Tree A) : Tree A :=
-    match t with
-    | Leaf _ ks =>
+(* insert into a sorted list *)
+Fixpoint insert_sorted_nat (ks : list nat) (x : nat) : list nat :=
+  match ks with
+  | [] => [x]
+  | y :: ys =>
+    match Nat.compare x y with
+    | Lt | Eq => x :: ks
+    | Gt => y :: insert_sorted_nat ys x
+    end
+  end.
+
+Fixpoint replace_nth_nat {B} (n : nat) (b : B) (ls : list B) : list B :=
+  match n, ls with
+  | _, [] => []
+  | 0, _ :: xs => b :: xs
+  | S n', y :: ys => y :: replace_nth_nat n' b ys
+  end.
+
+Fixpoint find_index_nat {A'} (p : A' -> bool) (l : list A') (n : nat) : option nat :=
+  match l with
+  | [] => None
+  | x :: xs => if p x then Some n else find_index_nat p xs (S n)
+  end.
+
+Definition find_index_start_nat {A'} (p : A' -> bool) (l : list A') : option nat :=
+  find_index_nat p l 0.
+
+(* split a full node *)
+Definition split_nat (m : nat) (t : TreeNat) : TreeNat :=
+  match t with
+  | LeafNat ks =>
       let i := length ks / 2 in
       let L := firstn i ks in
       let R := skipn i ks in
       match R with
-      | mid :: R' => Node m [mid] [Leaf m L; Leaf m R']
-      | []        => Leaf m ks 
+      | mid :: R' => NodeNat [mid] [LeafNat L; LeafNat R']
+      | [] => LeafNat ks
       end
-
-    | Node _ ks cs =>
-      let i   := length ks / 2 in
-      let Lk  := firstn i ks in
-      let Rk  := skipn i ks in
-      let Lc  := firstn (i+1) cs in
-      let Rc  := skipn (i+1) cs in
+  | NodeNat ks cs =>
+      let i  := length ks / 2 in
+      let Lk := firstn i ks in
+      let Rk := skipn i ks in
+      let Lc := firstn (i+1) cs in
+      let Rc := skipn (i+1) cs in
       match Rk, Lc, Rc with
-      | mid::Rk', Lc', Rc' =>
-        Node m [mid]
-             [ Node m Lk  Lc'
-             ; Node m Rk' Rc' ]
-      | _,_,_ => Node m ks cs 
+      | mid :: Rk', Lc', Rc' =>
+          NodeNat [mid]
+            [ NodeNat Lk  Lc'
+            ; NodeNat Rk' Rc' ]
+      | _, _, _ => NodeNat ks cs
       end
+  | NilNat => t
+  end.
 
-    | Nil _ => t
+Fixpoint insert_non_full_aux_nat (fuel : nat) (m : nat) (t : TreeNat) (x : nat) : TreeNat :=
+  match fuel with
+  | 0 => t
+  | S fuel' =>
+    match t with
+    | NilNat => LeafNat [x]
+    | LeafNat ks =>
+        let ks' := insert_sorted_nat ks x in
+        if length ks' <=? max_keys_nat m
+        then LeafNat ks'
+        else split_nat m (LeafNat ks')
+    | NodeNat ks cs =>
+        let idx :=
+          find_index_start_nat
+            (fun k => match Nat.compare x k with Lt | Eq => true | Gt => false end)
+            ks
+        in
+        let i := match idx with Some n => n | None => length ks end in
+        let c0 := nth i cs (LeafNat []) in
+        let c1 := if full_nat m c0 then split_nat m c0 else c0 in
+        let c2 := insert_non_full_aux_nat fuel' m c1 x in
+        let rebuilt := NodeNat ks (replace_nth_nat i c2 cs) in
+        if full_nat m rebuilt then split_nat m rebuilt else rebuilt
+    end
+  end.
+
+Definition insert_non_full_nat (m : nat) (t : TreeNat) (x : nat) : TreeNat :=
+  insert_non_full_aux_nat (tree_size_nat t) m t x.
+
+(* insert *)
+Definition insert_nat (m : nat) (t : TreeNat) (x : nat) : TreeNat :=
+  if full_nat m t
+  then insert_non_full_nat m (split_nat m t) x
+  else insert_non_full_nat m t x.
+
+(* Verify by flattening *)
+Definition flatten_after_insert_nat (m : nat) (t : TreeNat) (x : nat) : list nat :=
+  flatten_btree_nat (insert_nat m t x).
+
+Fixpoint list_eqb_nat (l1 l2 : list nat) : bool :=
+  match l1, l2 with
+  | [], [] => true
+  | x::xs, y::ys => Nat.eqb x y && list_eqb_nat xs ys
+  | _, _ => false
+  end.
+
+Definition verify_insert_flatten_nat (m : nat) (t : TreeNat) (x : nat) : bool :=
+  let flat1 := flatten_after_insert_nat m t x in
+  let flat2 := insert_sorted_nat (flatten_btree_nat t) x in
+  list_eqb_nat flat1 flat2.
+  
+(* Inserting value 25 into btree_example *)
+Eval compute in (
+  let t' := insert_nat 3 btree_example 25 in
+  is_btree_nat 3 t'
+).
+(* Expected: true *)
+
+Eval compute in (
+  flatten_after_insert_nat 3 btree_example 25
+).
+(* Expected: flatten_btree_nat btree_example with 25 inserted in order *)
+
+Eval compute in (
+  verify_insert_flatten_nat 3 btree_example 25
+).
+(* Expected: true *)
+
+(* Inserting value 5 into btree_example *)
+Eval compute in (
+  let t' := insert_nat 3 btree_example 5 in
+  is_btree_nat 3 t'
+).
+(* Expected: true *)
+
+Eval compute in (
+  flatten_after_insert_nat 3 btree_example 5
+).
+(* Expected: flatten_btree_nat btree_example with 5 inserted in order *)
+
+Eval compute in (
+  verify_insert_flatten_nat 3 btree_example 5
+).
+(* Expected: true *)
+
+(* Inserting duplicate value (already present) *)
+Eval compute in (
+  verify_insert_flatten_nat 3 btree_example 65
+).
+(* Expected: true – 65 is inserted again but list stays sorted *)
+
+(* Inserting very large value *)
+Eval compute in (
+  verify_insert_flatten_nat 3 btree_example 999
+).
+(* Expected: true *)
+
+(*------------------------------------------------------------*)
+Require Import Coq.Arith.PeanoNat.
+
+(* if xs was sorted, inserting x yields another sorted list. *)
+Require Import Lia.
+
+Lemma insert_sorted_nat_sorted :
+  forall x xs,
+    sorted_nat xs = true ->
+    sorted_nat (insert_sorted_nat xs x) = true.
+Proof.
+  intros x xs Hs.
+  induction xs as [| y ys IH]; simpl in *.
+  - reflexivity.
+  - destruct (Nat.compare x y) eqn:Cmp; simpl.
+    + (* x = y *)
+      apply andb_true_intro; split.
+      * apply Nat.leb_le. apply Nat.compare_eq_iff in Cmp. subst. lia.
+      * simpl in Hs. assumption.
+    + (* x < y *)
+      apply andb_true_intro; split.
+      * apply Nat.leb_le. apply Nat.compare_lt_iff in Cmp. lia.
+      * simpl in Hs. assumption.
+    + (* x > y *)
+      destruct ys as [| z zs].
+      * (* ys = [] *)
+        simpl in Hs. apply andb_true_intro; split.
+        -- apply Nat.leb_le. apply Nat.compare_gt_iff in Cmp. lia.
+        -- simpl. reflexivity.
+      * (* ys = z :: zs *)
+        simpl in Hs. apply andb_true_iff in Hs as [Hyz Hsorted]. 
+        (* apply andb_true_intro; split. *)
+        admit.
+        
+Admitted.
+ (*------------------------------------------*)
+Lemma list_eqb_nat_eq :
+  forall l1 l2,
+    list_eqb_nat l1 l2 = true ->
+    l1 = l2.
+Proof.
+  induction l1 as [| x xs IH]; destruct l2 as [| y ys]; simpl; intros H.
+  - reflexivity.
+  - discriminate.
+  - discriminate.
+  - apply andb_prop in H as [Hx Hrest].
+    apply Nat.eqb_eq in Hx.
+    apply IH in Hrest.
+    subst. reflexivity.
+Qed.
+
+Lemma insert_preserves_sortedness :
+  forall m t x,
+    check_btree_sorted_nat t = true ->
+    check_btree_sorted_nat (insert_nat m t x) = true.
+Proof.
+  intros m t x Hsorted.
+  unfold check_btree_sorted_nat in *.
+
+  remember (verify_insert_flatten_nat m t x) as b eqn:Heq.
+  unfold verify_insert_flatten_nat in Heq.
+  (* apply list_eqb_nat_eq in Heq. *)
+  admit.
+  (* rewrite Heq.
+  apply insert_sorted_nat_sorted.
+  assumption. *)
+Admitted.
+
+
+(*-----------------------------------------------------*)
+
+(*If the original tree t is a valid B-tree, 
+then after inserting x, the resulting tree still has a valid root:
+
+    - If it's a leaf, it's ok.
+
+    - If it's a Node, it has at least 2 children.*)
+Section proofs.
+Variable m : nat.
+Hypothesis m_big_enough : max_keys_nat m > 0.
+
+
+Lemma split_nat_node_has_two_children :
+  forall t,
+    full_nat m t = true ->
+    match split_nat m t with
+    | NodeNat _ children => length children = 2
+    | _ => True
     end.
+Proof.
+  intros t Hfull.
+  destruct t as [ | ks | ks cs].
+  - (* Case: NilNat *)
+    simpl in Hfull. discriminate.
+  - (* Case: LeafNat *)
+    simpl in Hfull.
+    unfold split_nat.
+    remember (length ks / 2) as i eqn:Heqi.
+    destruct (skipn i ks) as [| mid R'] eqn:Hskip.
+    + (* returns Leaf *)
+      simpl. trivial.
+    + (* returns Node with 2 Leaf children *)
+      simpl. reflexivity.
+  - (* Case: NodeNat *)
+    simpl in Hfull.
+    unfold split_nat.
+    remember (length ks / 2) as i eqn:Heqi.
+    destruct (skipn i ks) as [| mid Rk'] eqn:HRk.
+    + (* returns original node *)
+      simpl. exfalso.
+      (* this follows from m_big_enough, and skipn (length ks /2) ks = [] ==> ks => [] *)
+      admit.
+    + simpl. reflexivity.
+Admitted.
+
+Lemma split_nat_not_full t :
+full_nat m (split_nat m t) = false.
+Proof. Admitted.
+
+Lemma split_nat_btree t : is_btree_nat m t = true -> is_btree_nat m (split_nat m t) = true.
+Proof. Admitted.
+
+Lemma insert_aux_preserves_root_children' :
+forall fuel x t ks cs, full_nat m t = false -> is_btree_nat m t = true ->
+insert_non_full_aux_nat fuel m t x = NodeNat ks cs -> length cs >= 2. 
+Proof.
+  intros fuel. destruct fuel as [|fuel].
+  -  simpl. intros. (* follows from H1 , H0 *) admit.
+  - intros x y t ks cs Hfull Hbtree.
+    simpl. 
+Admitted.
+
+Lemma insert_aux_preserves_root_children :
+forall fuel x t, full_nat m t = false -> is_btree_nat m t = true ->
+check_root_children_nat (insert_non_full_aux_nat fuel m t x) = true. 
+Proof. (* follow from  insert_aux_preserves_root_children' *) Admitted.
+
+Lemma insert_preserves_root_children :
+  forall (x : nat) (t : TreeNat),
+    is_btree_nat m t = true ->
+    check_root_children_nat (insert_nat m t x) = true.
+Proof.
+  intros x t Hvalid.
+
+  unfold insert_nat.
+  remember (full_nat m t) as is_full eqn:Hfull.
+
+  destruct is_full.
+  - (* Root is full: insert after splitting the root *)
+    (* After splitting, the result is always a Node with two children *)
+    (* First, split the root *)
+    remember (split_nat m t) as t2.
+    unfold insert_non_full_nat.
+    apply insert_aux_preserves_root_children.
+    + subst t2. apply split_nat_not_full.
+    + subst t2. apply split_nat_btree. assumption.
+  - apply insert_aux_preserves_root_children; auto.
+Qed.
+
+(* helps me show that length (children of split_nat m t) = 2 *)
 
 
-  Fixpoint insert_non_full_aux (fuel : nat) (t : Tree A) (x : A) : Tree A :=
-    match fuel with
-    | 0 =>
-      t
-
-    | S fuel' =>
-      match t with
-
-      | Nil _ =>
-        (* inserting into an empty tree just yields a one key leaf *)
-        Leaf m [x]
-
-      | Leaf _ ks =>
-        let ks' := insert_sorted ks x in
-        if length ks' <=? max_keys then
-          Leaf m ks'
-        else
-          split (Leaf m ks')
-
-      | Node _ ks cs =>
-        (* Decide which child to recurse on. *)
-        let idx := find_index_start
-                     (fun k => match cmp x k with
-                               | Lt => true
-                               | Eq => true
-                               | Gt => false
-                               end) ks in
-        let i :=
-          match idx with
-          | Some n => n
-          | None   => length ks  (* go to the rightmost child, if x is larger than all keys *)
-          end in
-
-        (* c0 is the chosen child; if it’s full, split it first. *)
-        let c0 := nth i cs (Leaf m []) in
-        let c1 := if full c0 then split c0 else c0 in
-
-        let c2 := insert_non_full_aux fuel' c1 x in
-
-        (* Rebuild this node with the updated child. *)
-        let rebuilt := Node m ks (replace_nth i c2 cs) in
-
-        (* If the rebuilt node is now full, we split it at the top too. *)
-        if full rebuilt then split rebuilt else rebuilt
-      end
-    end.
-
-  Definition insert_non_full (t : Tree A) (x : A) : Tree A :=
-    insert_non_full_aux (tree_size t) t x.
-
-  (* Finally, the top level [insert] stays the same: if the root is full, split first. *)
-  Definition insert (t : Tree A) (x : A) : Tree A :=
-    if full t then insert_non_full (split t) x
-              else insert_non_full t x.
-End BTreeInsert.
 
 
-Eval compute in (
-  let t' := @insert nat Nat.compare 3 btree_example 25 in
-  is_btree 3 t'
-).
-(* true *)
-
-Eval compute in (
-  let t' := @insert nat Nat.compare 3 btree_example 5 in
-  is_btree 3 t'
-).
-(* true *)
-
-(*-----------------------------------------------------------------------------------------*)
-
-Section BTreeInsertFlattenVerify.
-  Context {A : Type}.
-  Context (cmp : A -> A -> comparison).
-
-  (* Insert into the tree, then flatten *)
-  Definition flatten_after_insert (t : Tree A) (x : A) (insert : Tree A -> A -> Tree A) : list A :=
-    flatten_btree (insert t x).
-
-  (* Comparison for lists *)
-  Context (eqb : A -> A -> bool).
-
-  Fixpoint list_eqb (l1 l2 : list A) : bool :=
-    match l1, l2 with
-    | [], [] => true
-    | x::xs, y::ys => eqb x y && list_eqb xs ys
-    | _, _ => false
-    end.
-
-  (*Verification function *)
-  Definition verify_insert_flatten (t : Tree A) (x : A) (insert : Tree A -> A -> Tree A) : bool :=
-  let flat_inserted := flatten_after_insert t x insert in
-  let inserted_flat := insert_sorted cmp (flatten_btree t) x in
-  list_eqb flat_inserted inserted_flat.
 
 
-End BTreeInsertFlattenVerify.
-
-
-Eval compute in (
-  @verify_insert_flatten
-    nat
-    Nat.compare
-    Nat.eqb
-    btree_example
-    25
-    (@insert nat Nat.compare 3)
-).
-(* = true : bool *)
-
-Eval compute in (
-  @verify_insert_flatten
-    nat
-    Nat.compare
-    Nat.eqb
-    btree_example
-    5
-    (@insert nat Nat.compare 3)
-).
-(* = true : bool *)
